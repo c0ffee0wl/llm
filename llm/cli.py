@@ -5,6 +5,9 @@ from dataclasses import asdict
 import io
 import json
 import os
+from rich.console import Console
+from rich.live import Live
+from rich.markdown import Markdown
 from llm import (
     Attachment,
     AsyncConversation,
@@ -303,6 +306,58 @@ def schema_option(fn):
     return fn
 
 
+def _output(should_stream, markdown, response, extract=None, extract_last=None):
+    """Helper function to handle synchronous output with optional markdown rendering."""
+    console = Console()
+
+    if should_stream:
+        accumulated_text = ""
+        if markdown:
+            with Live(refresh_per_second=10) as live:
+                for chunk in response:
+                    accumulated_text += chunk
+                    live.update(Markdown(accumulated_text))
+        else:
+            for chunk in response:
+                print(chunk, end="")
+                sys.stdout.flush()
+            print("")
+    else:
+        text = response.text()
+        if extract or extract_last:
+            text = extract_fenced_code_block(text, last=extract_last) or text
+        if markdown:
+            console.print(Markdown(text))
+        else:
+            print(text)
+
+
+async def _async_output(should_stream, markdown, response, extract=None, extract_last=None):
+    """Helper function to handle asynchronous output with optional markdown rendering."""
+    console = Console()
+
+    if should_stream:
+        accumulated_text = ""
+        if markdown:
+            with Live(refresh_per_second=10) as live:
+                async for chunk in response:
+                    accumulated_text += chunk
+                    live.update(Markdown(accumulated_text))
+        else:
+            async for chunk in response:
+                print(chunk, end="")
+                sys.stdout.flush()
+            print("")
+    else:
+        text = await response.text()
+        if extract or extract_last:
+            text = extract_fenced_code_block(text, last=extract_last) or text
+        if markdown:
+            console.print(Markdown(text))
+        else:
+            print(text)
+
+
 @click.group(
     cls=DefaultGroup,
     default="prompt",
@@ -471,6 +526,12 @@ def cli():
     is_flag=True,
     help="Extract last fenced code block",
 )
+@click.option(
+    "--markdown",
+    "--md",
+    is_flag=True,
+    help="Render output as markdown",
+)
 def prompt(
     prompt,
     system,
@@ -502,6 +563,7 @@ def prompt(
     usage,
     extract,
     extract_last,
+    markdown,
 ):
     """
     Execute a prompt
@@ -834,36 +896,16 @@ def prompt(
         if async_:
 
             async def inner():
-                if should_stream:
-                    response = prompt_method(
-                        prompt,
-                        attachments=resolved_attachments,
-                        system=system,
-                        schema=schema,
-                        fragments=resolved_fragments,
-                        system_fragments=resolved_system_fragments,
-                        **kwargs,
-                    )
-                    async for chunk in response:
-                        print(chunk, end="")
-                        sys.stdout.flush()
-                    print("")
-                else:
-                    response = prompt_method(
-                        prompt,
-                        fragments=resolved_fragments,
-                        attachments=resolved_attachments,
-                        schema=schema,
-                        system=system,
-                        system_fragments=resolved_system_fragments,
-                        **kwargs,
-                    )
-                    text = await response.text()
-                    if extract or extract_last:
-                        text = (
-                            extract_fenced_code_block(text, last=extract_last) or text
-                        )
-                    print(text)
+                response = prompt_method(
+                    prompt,
+                    attachments=resolved_attachments,
+                    system=system,
+                    schema=schema,
+                    fragments=resolved_fragments,
+                    system_fragments=resolved_system_fragments,
+                    **kwargs,
+                )
+                await _async_output(should_stream, markdown, response, extract, extract_last)
                 return response
 
             response = asyncio.run(inner())
@@ -877,16 +919,7 @@ def prompt(
                 system_fragments=resolved_system_fragments,
                 **kwargs,
             )
-            if should_stream:
-                for chunk in response:
-                    print(chunk, end="")
-                    sys.stdout.flush()
-                print("")
-            else:
-                text = response.text()
-                if extract or extract_last:
-                    text = extract_fenced_code_block(text, last=extract_last) or text
-                print(text)
+            _output(should_stream, markdown, response, extract, extract_last)
     # List of exceptions that should never be raised in pytest:
     except (ValueError, NotImplementedError) as ex:
         raise click.ClickException(str(ex))
@@ -1014,6 +1047,12 @@ def prompt(
     default=5,
     help="How many chained tool responses to allow, default 5, set 0 for unlimited",
 )
+@click.option(
+    "--markdown",
+    "--md",
+    is_flag=True,
+    help="Render output as markdown",
+)
 def chat(
     system,
     model_id,
@@ -1032,6 +1071,7 @@ def chat(
     tools_debug,
     tools_approve,
     chain_limit,
+    markdown,
 ):
     """
     Hold an ongoing chat with a model.
@@ -1231,11 +1271,8 @@ def chat(
         # System prompt and system fragments only sent for the first message
         system = None
         argument_system_fragments = []
-        for chunk in response:
-            print(chunk, end="")
-            sys.stdout.flush()
+        _output(should_stream=True, markdown=markdown, response=response)
         response.log_to_db(db)
-        print("")
 
 
 def load_conversation(
