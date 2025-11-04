@@ -85,6 +85,8 @@ import yaml
 warnings.simplefilter("ignore", ResourceWarning)
 
 DEFAULT_TEMPLATE = "prompt: "
+# User-Agent header for HTTP requests to avoid 403 errors from sites that block httpx
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0"
 
 
 class FragmentNotFound(Exception):
@@ -124,7 +126,11 @@ def resolve_fragments(
     resolved: List[Union[Fragment, Attachment]] = []
     for fragment in fragments:
         if fragment.startswith("http://") or fragment.startswith("https://"):
-            client = httpx.Client(follow_redirects=True, max_redirects=3)
+            client = httpx.Client(
+                follow_redirects=True,
+                max_redirects=3,
+                headers={"User-Agent": USER_AGENT}
+            )
             response = client.get(fragment)
             response.raise_for_status()
             resolved.append(Fragment(response.text, fragment))
@@ -228,7 +234,7 @@ def resolve_attachment(value):
     if "://" in value:
         # Confirm URL exists and try to guess type
         try:
-            response = httpx.head(value)
+            response = httpx.head(value, headers={"User-Agent": USER_AGENT})
             response.raise_for_status()
             mimetype = response.headers.get("content-type")
         except httpx.HTTPError as ex:
@@ -3936,7 +3942,7 @@ def _parse_yaml_template(name, content):
 def load_template(name: str) -> Template:
     "Load template, or raise LoadTemplateError(msg)"
     if name.startswith("https://") or name.startswith("http://"):
-        response = httpx.get(name)
+        response = httpx.get(name, headers={"User-Agent": USER_AGENT})
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as ex:
