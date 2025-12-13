@@ -2,6 +2,7 @@ import asyncio
 import click
 from click_default_group import DefaultGroup
 from dataclasses import asdict
+from importlib.metadata import version
 import io
 import json
 import os
@@ -1265,10 +1266,8 @@ def chat(
 
         response = conversation.chain(
             prompt,
-            fragments=[str(fragment) for fragment in fragments],
-            system_fragments=[
-                str(system_fragment) for system_fragment in argument_system_fragments
-            ],
+            fragments=fragments,
+            system_fragments=argument_system_fragments,
             attachments=attachments,
             system=system,
             **kwargs,
