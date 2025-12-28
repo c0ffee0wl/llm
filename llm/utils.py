@@ -25,7 +25,9 @@ MIME_TYPE_FIXES = {
 class Fragment(str):
     def __new__(cls, content, *args, **kwargs):
         # For immutable classes like str, __new__ creates the string object
-        return super().__new__(cls, content)
+        from llm.sanitize import sanitize_unicode
+
+        return super().__new__(cls, sanitize_unicode(content))
 
     def __init__(self, content, source=""):
         # Initialize our custom attributes

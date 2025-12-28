@@ -293,6 +293,11 @@ class ToolCall:
     arguments: dict
     tool_call_id: Optional[str] = None
 
+    def __post_init__(self):
+        from llm.sanitize import sanitize_dict
+
+        self.arguments = sanitize_dict(self.arguments)
+
 
 @dataclass
 class ToolResult:
@@ -302,6 +307,11 @@ class ToolResult:
     tool_call_id: Optional[str] = None
     instance: Optional[Toolbox] = None
     exception: Optional[Exception] = None
+
+    def __post_init__(self):
+        from llm.sanitize import sanitize_unicode
+
+        self.output = sanitize_unicode(self.output)
 
 
 @dataclass
@@ -368,16 +378,21 @@ class Prompt:
 
     @property
     def prompt(self):
-        return "\n".join(self.fragments + ([self._prompt] if self._prompt else []))
+        from llm.sanitize import sanitize_unicode
+
+        raw = "\n".join(self.fragments + ([self._prompt] if self._prompt else []))
+        return sanitize_unicode(raw)
 
     @property
     def system(self):
+        from llm.sanitize import sanitize_unicode
+
         bits = [
             bit.strip()
             for bit in (self.system_fragments + [self._system or ""])
             if bit.strip()
         ]
-        return "\n\n".join(bits)
+        return sanitize_unicode("\n\n".join(bits))
 
 
 def _wrap_tools(tools: List[ToolDef]) -> List[Tool]:
@@ -679,6 +694,12 @@ class _BaseResponse:
     def add_tool_call(self, tool_call: ToolCall):
         self._tool_calls.append(tool_call)
 
+    def _filter_chunk(self, chunk: str) -> str:
+        """Filter response chunks to remove dangerous Unicode characters."""
+        from llm.sanitize import sanitize_unicode
+
+        return sanitize_unicode(chunk)
+
     def set_usage(
         self,
         *,
@@ -770,7 +791,10 @@ class _BaseResponse:
         response._prompt_json = prompt_json
         response.response_json = json.loads(row["response_json"] or "null")
         response._done = True
-        response._chunks = [row["response"]]
+        # Sanitize response loaded from database (defense against pre-existing unsanitized data)
+        from llm.sanitize import sanitize_unicode
+
+        response._chunks = [sanitize_unicode(row["response"]) if row["response"] else ""]
         # Attachments
         response.attachments = [
             Attachment.from_row(attachment_row)
@@ -1168,8 +1192,9 @@ class Response(_BaseResponse):
                 conversation=self.conversation,
             ):
                 assert chunk is not None
-                yield chunk
-                self._chunks.append(chunk)
+                filtered = self._filter_chunk(chunk)
+                yield filtered
+                self._chunks.append(filtered)
         elif isinstance(self.model, KeyModel):
             for chunk in self.model.execute(
                 self.prompt,
@@ -1179,8 +1204,9 @@ class Response(_BaseResponse):
                 key=self.model.get_key(self._key),
             ):
                 assert chunk is not None
-                yield chunk
-                self._chunks.append(chunk)
+                filtered = self._filter_chunk(chunk)
+                yield filtered
+                self._chunks.append(filtered)
         else:
             raise Exception("self.model must be a Model or KeyModel")
 
@@ -1417,8 +1443,9 @@ class AsyncResponse(_BaseResponse):
         try:
             chunk = await self._generator.__anext__()
             assert chunk is not None
-            self._chunks.append(chunk)
-            return chunk
+            filtered = self._filter_chunk(chunk)
+            self._chunks.append(filtered)
+            return filtered
         except StopAsyncIteration:
             if self.conversation:
                 self.conversation.responses.append(self)
