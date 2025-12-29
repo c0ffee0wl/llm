@@ -76,6 +76,10 @@ def sanitize_unicode(text: Optional[str], strict: bool = False) -> Optional[str]
     if not text:
         return text
 
+    # Handle non-string input gracefully (e.g., list/dict from tool output)
+    if not isinstance(text, str):
+        return text
+
     # Use cached env var check for performance
     if _STRICT_MODE_ENV:
         strict = True

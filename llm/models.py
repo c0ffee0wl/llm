@@ -309,9 +309,9 @@ class ToolResult:
     exception: Optional[Exception] = None
 
     def __post_init__(self):
-        from llm.sanitize import sanitize_unicode
+        from llm.sanitize import sanitize_dict
 
-        self.output = sanitize_unicode(self.output)
+        self.output = sanitize_dict(self.output)
 
 
 @dataclass

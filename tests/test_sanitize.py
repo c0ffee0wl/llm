@@ -188,6 +188,24 @@ class TestIntegrationWithModels:
         result = ToolResult(name="test", output=text)
         assert result.output == text
 
+    def test_tool_result_handles_dict_output(self):
+        """ToolResult should handle dict output without error."""
+        from llm.models import ToolResult
+
+        # Dict with string values containing malicious Unicode should be sanitized
+        output = {"key": "value\U000E0041hidden", "nested": {"inner": "text\U000E0042"}}
+        result = ToolResult(name="test", output=output)
+        assert result.output == {"key": "valuehidden", "nested": {"inner": "text"}}
+
+    def test_tool_result_handles_list_output(self):
+        """ToolResult should handle list output without error."""
+        from llm.models import ToolResult
+
+        # List of dicts should not crash (the original bug)
+        output = [{"a": "value\U000E0041"}, {"b": "other"}]
+        result = ToolResult(name="test", output=output)
+        assert result.output == [{"a": "value"}, {"b": "other"}]
+
     def test_prompt_property_sanitizes(self):
         """Prompt.prompt property should return sanitized text."""
         from llm.models import Prompt
