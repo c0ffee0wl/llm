@@ -1,6 +1,6 @@
 import asyncio
 import base64
-from condense_json import condense_json
+from condense_json import condense_json, uncondense_json
 from dataclasses import dataclass, field
 import datetime
 from .errors import NeedsKeyException
@@ -795,7 +795,14 @@ class _BaseResponse:
         prompt_json = json.loads(row["prompt_json"] or "null")
         response.id = row["id"]
         response._prompt_json = prompt_json
-        response.response_json = json.loads(row["response_json"] or "null")
+        # Uncondense response_json: condense_json replaces the response text with
+        # {"$": "r:response_id"} references to save space. We need to expand them.
+        response_json_raw = json.loads(row["response_json"] or "null")
+        if response_json_raw and row.get("response"):
+            replacements = {f"r:{row['id']}": row["response"]}
+            response.response_json = uncondense_json(response_json_raw, replacements)
+        else:
+            response.response_json = response_json_raw
         response._done = True
         # Sanitize response loaded from database (defense against pre-existing unsanitized data)
         from llm.sanitize import sanitize_unicode
