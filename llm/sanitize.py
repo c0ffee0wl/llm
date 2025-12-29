@@ -11,7 +11,7 @@ Reference: https://embracethered.com/blog/posts/2024/m365-copilot-prompt-injecti
 from __future__ import annotations
 
 import os
-from typing import Any, Optional
+from typing import Any, overload
 
 # Unicode Tag characters (U+E0000-U+E007F) - the PRIMARY attack vector for ASCII smuggling
 # These are deprecated Unicode characters that encode ASCII invisibly
@@ -52,7 +52,15 @@ _STRICT_REMOVE = _ALWAYS_REMOVE | _ZERO_WIDTH | _BIDI
 _STRICT_MODE_ENV = os.environ.get("LLM_SANITIZE_STRICT", "").lower() in ("1", "true", "yes")
 
 
-def sanitize_unicode(text: Optional[str], strict: bool = False) -> Optional[str]:
+@overload
+def sanitize_unicode(text: str, strict: bool = False) -> str: ...
+@overload
+def sanitize_unicode(text: None, strict: bool = False) -> None: ...
+@overload
+def sanitize_unicode(text: Any, strict: bool = False) -> Any: ...
+
+
+def sanitize_unicode(text: Any, strict: bool = False) -> Any:
     """
     Remove dangerous invisible Unicode characters from text.
 
@@ -67,17 +75,21 @@ def sanitize_unicode(text: Optional[str], strict: bool = False) -> Optional[str]
     (checked once at module load for performance).
 
     Args:
-        text: Input string to sanitize (None passes through)
+        text: Input string to sanitize. None and non-strings pass through unchanged.
         strict: If True, remove all potentially dangerous chars (may break text)
 
     Returns:
-        Sanitized string with dangerous characters removed, or None if input was None
+        Sanitized string with dangerous characters removed.
+        None if input was None, or unchanged input if not a string.
     """
-    if not text:
-        return text
+    if text is None:
+        return None
 
     # Handle non-string input gracefully (e.g., list/dict from tool output)
     if not isinstance(text, str):
+        return text
+
+    if not text:
         return text
 
     # Use cached env var check for performance
@@ -90,10 +102,10 @@ def sanitize_unicode(text: Optional[str], strict: bool = False) -> Optional[str]
 
 def sanitize_dict(obj: Any) -> Any:
     """
-    Recursively sanitize string values (and keys) in dict/list structures.
+    Recursively sanitize string values (and keys) in dict/list/tuple structures.
 
     Args:
-        obj: Any object - strings are sanitized, dicts/lists are recursed into
+        obj: Any object - strings are sanitized, dicts/lists/tuples are recursed into
 
     Returns:
         Sanitized copy of the structure with all strings cleaned
@@ -101,10 +113,9 @@ def sanitize_dict(obj: Any) -> Any:
     if isinstance(obj, str):
         return sanitize_unicode(obj)
     elif isinstance(obj, dict):
-        return {
-            (sanitize_unicode(k) if isinstance(k, str) else k): sanitize_dict(v)
-            for k, v in obj.items()
-        }
+        return {sanitize_dict(k): sanitize_dict(v) for k, v in obj.items()}
     elif isinstance(obj, list):
         return [sanitize_dict(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(sanitize_dict(item) for item in obj)
     return obj

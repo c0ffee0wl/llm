@@ -294,24 +294,30 @@ class ToolCall:
     tool_call_id: Optional[str] = None
 
     def __post_init__(self):
-        from llm.sanitize import sanitize_dict
+        from llm.sanitize import sanitize_dict, sanitize_unicode
 
+        self.name = sanitize_unicode(self.name)
         self.arguments = sanitize_dict(self.arguments)
+        if self.tool_call_id is not None:
+            self.tool_call_id = sanitize_unicode(self.tool_call_id)
 
 
 @dataclass
 class ToolResult:
     name: str
-    output: str
+    output: Any  # Can be str, dict, list after sanitize_dict processing
     attachments: List[Attachment] = field(default_factory=list)
     tool_call_id: Optional[str] = None
     instance: Optional[Toolbox] = None
     exception: Optional[Exception] = None
 
     def __post_init__(self):
-        from llm.sanitize import sanitize_dict
+        from llm.sanitize import sanitize_dict, sanitize_unicode
 
+        self.name = sanitize_unicode(self.name)
         self.output = sanitize_dict(self.output)
+        if self.tool_call_id is not None:
+            self.tool_call_id = sanitize_unicode(self.tool_call_id)
 
 
 @dataclass

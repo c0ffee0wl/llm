@@ -206,6 +206,57 @@ class TestIntegrationWithModels:
         result = ToolResult(name="test", output=output)
         assert result.output == [{"a": "value"}, {"b": "other"}]
 
+    def test_tool_result_handles_tuple_output(self):
+        """ToolResult should handle tuple output."""
+        from llm.models import ToolResult
+
+        output = ("value\U000E0041", {"key": "text\U000E0042"})
+        result = ToolResult(name="test", output=output)
+        assert result.output == ("value", {"key": "text"})
+
+    def test_tool_result_sanitizes_name(self):
+        """ToolResult should sanitize the name field."""
+        from llm.models import ToolResult
+
+        result = ToolResult(name="tool\U000E0041name", output="output")
+        assert result.name == "toolname"
+
+    def test_tool_result_sanitizes_tool_call_id(self):
+        """ToolResult should sanitize the tool_call_id field."""
+        from llm.models import ToolResult
+
+        result = ToolResult(name="test", output="output", tool_call_id="id\U000E0041value")
+        assert result.tool_call_id == "idvalue"
+
+    def test_tool_call_sanitizes_name(self):
+        """ToolCall should sanitize the name field."""
+        from llm.models import ToolCall
+
+        call = ToolCall(name="tool\U000E0041name", arguments={})
+        assert call.name == "toolname"
+
+    def test_tool_call_sanitizes_tool_call_id(self):
+        """ToolCall should sanitize the tool_call_id field."""
+        from llm.models import ToolCall
+
+        call = ToolCall(name="test", arguments={}, tool_call_id="id\U000E0041value")
+        assert call.tool_call_id == "idvalue"
+
+    def test_tool_call_sanitizes_arguments(self):
+        """ToolCall should sanitize nested arguments."""
+        from llm.models import ToolCall
+
+        call = ToolCall(name="test", arguments={"key": "value\U000E0041hidden"})
+        assert call.arguments == {"key": "valuehidden"}
+
+    def test_sanitize_dict_handles_tuple_keys(self):
+        """sanitize_dict should handle tuple keys containing strings."""
+        from llm.sanitize import sanitize_dict
+
+        obj = {("key\U000E0041", "other\U000E0042"): "value\U000E0043"}
+        result = sanitize_dict(obj)
+        assert result == {("key", "other"): "value"}
+
     def test_prompt_property_sanitizes(self):
         """Prompt.prompt property should return sanitized text."""
         from llm.models import Prompt
