@@ -418,3 +418,10 @@ def m020_tool_results_attachments(db):
 @migration
 def m021_tool_results_exception(db):
     db["tool_results"].add_column("exception", str)
+
+
+@migration
+def m022_conversations_source(db):
+    """Add source column to track conversation origin (gui, tui, cli, api)."""
+    if "source" not in db["conversations"].columns_dict:
+        db["conversations"].add_column("source", str)

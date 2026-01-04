@@ -423,6 +423,7 @@ class _BaseConversation:
     responses: List["_BaseResponse"] = field(default_factory=list)
     tools: Optional[List[ToolDef]] = None
     chain_limit: Optional[int] = None
+    source: Optional[str] = None  # Origin: "gui", "tui", "cli", "api", or None
 
     @classmethod
     @abstractmethod
@@ -518,6 +519,7 @@ class Conversation(_BaseConversation):
             model=get_model(row["model"]),
             id=row["id"],
             name=row["name"],
+            source=row.get("source"),
         )
 
     def __repr__(self):
@@ -624,6 +626,7 @@ class AsyncConversation(_BaseConversation):
             model=get_async_model(row["model"]),
             id=row["id"],
             name=row["name"],
+            source=row.get("source"),
         )
 
     def __repr__(self):
@@ -856,6 +859,7 @@ class _BaseResponse:
                     self.prompt.prompt or self.prompt.system or ""
                 ),
                 "model": conversation.model.model_id,
+                "source": conversation.source,
             },
             ignore=True,
         )
